@@ -1,4 +1,3 @@
-
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -14,19 +13,35 @@ import chromadb
 from chromadb.config import Settings
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+def get_groq_api_key():
+    if 'GROQ_API_KEY' in os.environ:
+        return os.environ['GROQ_API_KEY']
 
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in environment variables. Please check your .env file.")
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        if 'GROQ_API_KEY' in os.environ:
+            return os.environ['GROQ_API_KEY']
+    except:
+        pass
 
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'GROQ_API_KEY' in st.secrets:
+            return st.secrets['GROQ_API_KEY']
+    except:
+        pass
+
+    return None
+
+
+GROQ_API_KEY = get_groq_api_key()
 
 
 def process_all_pdfs(pdf_directory):
-
     all_documents = []
     pdf_dir = Path(pdf_directory)
     pdf_files = list(pdf_dir.glob("**/*.pdf"))
@@ -38,7 +53,6 @@ def process_all_pdfs(pdf_directory):
         try:
             loader = PyMuPDFLoader(str(pdf))
             documents = loader.load()
-
 
             for doc in documents:
                 doc.metadata['source_file'] = pdf.name
@@ -55,7 +69,6 @@ def process_all_pdfs(pdf_directory):
 
 
 def split_documents(documents, chunk_size=1000, chunk_overlap=200):
-
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -66,7 +79,6 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     split_docs = text_splitter.split_documents(documents)
     print(f"Split {len(documents)} documents into {len(split_docs)} chunks")
 
-    # Show example of a chunk
     if split_docs:
         print(f"\nExample chunk:")
         print(f"content: {split_docs[0].page_content[:200]}...")
@@ -76,15 +88,12 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=200):
 
 
 class EmbeddingManager:
-
-
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
         self.model = None
         self._load_model()
 
     def _load_model(self):
-
         try:
             print(f"Loading embedding model: {self.model_name}")
             self.model = SentenceTransformer(self.model_name)
@@ -94,7 +103,6 @@ class EmbeddingManager:
             raise
 
     def generate_embeddings(self, texts: List[str]) -> np.ndarray:
-
         if not self.model:
             raise ValueError("Model not loaded")
 
@@ -105,8 +113,6 @@ class EmbeddingManager:
 
 
 class VectorStore:
-
-
     def __init__(self, collection_name: str = "pdf_documents",
                  persist_directory: str = "C:/Users/DELL/LawSchool0.2/vector_store"):
         self.collection_name = collection_name
@@ -116,12 +122,10 @@ class VectorStore:
         self._init_vectorstore()
 
     def _init_vectorstore(self):
-
         try:
             os.makedirs(self.persist_directory, exist_ok=True)
             self.client = chromadb.PersistentClient(path=self.persist_directory)
 
-            # Get or create collection
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"Description": "PDF document embedding for RAG"}
@@ -133,14 +137,11 @@ class VectorStore:
             raise
 
     def _doc_hash(self, text: str) -> str:
-
         return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
     def add_documents(self, documents: List[Any], embeddings: np.ndarray):
-
         if len(documents) != len(embeddings):
             raise ValueError("Number of documents must match number of embeddings")
-
 
         existing_ids = set()
         try:
@@ -191,27 +192,21 @@ class VectorStore:
 
 
 class RagRetriever:
-
-
     def __init__(self, vector_store, embedding_manager: EmbeddingManager):
         self.vector_store = vector_store
         self.embedding_manager = embedding_manager
 
     def retrieve(self, query: str, top_k: int = 5, score_threshold: float = 0.0) -> List[Dict[str, Any]]:
-        """Retrieve relevant documents for a query"""
         print(f"Retrieving documents for query: '{query}'")
         print(f"Top_k: {top_k}, score_threshold: {score_threshold}")
 
-        # Generate query embeddings
         query_embedding = self.embedding_manager.generate_embeddings([query])[0]
 
-        # Search in vector store
         try:
             results = self.vector_store.collection.query(
                 query_embeddings=[query_embedding.tolist()],
                 n_results=top_k
             )
-
 
             retrieved_results = []
 
@@ -222,7 +217,6 @@ class RagRetriever:
                 ids = results["ids"][0]
 
                 for i, (doc_id, document, metadata, distance) in enumerate(zip(ids, documents, metadatas, distances)):
-
                     similarity_score = 1 - distance
 
                     if similarity_score >= score_threshold:
@@ -247,6 +241,10 @@ class RagRetriever:
 
 
 def rag_advanced(query, retriever, llm, top_k=5, min_score=0.2, return_context=False):
+    if not GROQ_API_KEY:
+        return {
+            'answer': 'GROQ_API_KEY not found. Please set it in Streamlit secrets or environment variables.',
+            'sources': [], 'confidence': 0.0, 'context': ''}
 
     results = retriever.retrieve(query, top_k=top_k, score_threshold=min_score)
     if not results:
@@ -254,17 +252,15 @@ def rag_advanced(query, retriever, llm, top_k=5, min_score=0.2, return_context=F
             'answer': 'No relevant context found, it is either that your question is beyond the scope of this system or your prompt needs to be reconstructed.',
             'sources': [], 'confidence': 0.0, 'context': ''}
 
-
     context = "\n\n".join([doc['content'] for doc in results])
     sources = [{
         'source': doc['metadata'].get('source_file', doc['metadata'].get('source', 'unknown')),
-        'page': str(doc['metadata'].get('page', 'unknown')),  # FIXED: Convert to string
+        'page': str(doc['metadata'].get('page', 'unknown')),
         'score': doc['similarity_score'],
         'preview': doc['content'][:120] + '...'
     } for doc in results]
 
     confidence = max([doc['similarity_score'] for doc in results])
-
 
     prompt = f"""
 You are an expert AI legal scholar with deep knowledge of Nigerian and general common law.
@@ -306,9 +302,9 @@ Answer:
     return output
 
 
-
 def rag_simple(query, retriever, llm, top_k=5):
-
+    if not GROQ_API_KEY:
+        return "GROQ_API_KEY not found. Please set it in Streamlit secrets or environment variables."
 
     results = retriever.retrieve(query, top_k=top_k)
 
@@ -316,7 +312,6 @@ def rag_simple(query, retriever, llm, top_k=5):
 
     if not context:
         return "No relevant context found for this query, it is either that the question if beyond the scope of this system or your prompt needs to be reconstructed."
-
 
     prompt = f"""You are an AI that is greatly knowledgeable about the law.
         Use the following context to answer the question concisely
@@ -333,8 +328,9 @@ def rag_simple(query, retriever, llm, top_k=5):
     return response.content
 
 
-
 def initialize_llm():
+    if not GROQ_API_KEY:
+        return None
 
     return ChatGroq(
         groq_api_key=GROQ_API_KEY,

@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 def get_groq_api_key():
     if 'GROQ_API_KEY' in os.environ:
         return os.environ['GROQ_API_KEY']
@@ -37,9 +36,7 @@ def get_groq_api_key():
 
     return None
 
-
 GROQ_API_KEY = get_groq_api_key()
-
 
 def process_all_pdfs(pdf_directory):
     all_documents = []
@@ -67,7 +64,6 @@ def process_all_pdfs(pdf_directory):
     print(f"\nTotal documents loaded: {len(all_documents)}")
     return all_documents
 
-
 def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -85,7 +81,6 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=200):
         print(f"metadata: {split_docs[0].metadata}")
 
     return split_docs
-
 
 class EmbeddingManager:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
@@ -111,15 +106,26 @@ class EmbeddingManager:
         print(f"Generated embeddings with shape {embeddings.shape}")
         return embeddings
 
-
 class VectorStore:
     def __init__(self, collection_name: str = "pdf_documents",
-                 persist_directory: str = "C:/Users/DELL/LawSchool0.2/vector_store"):
+                 persist_directory: str = "./vector_store"):
         self.collection_name = collection_name
         self.persist_directory = persist_directory
         self.client = None
         self.collection = None
         self._init_vectorstore()
+        self._ensure_documents_loaded()
+
+    def _ensure_documents_loaded(self):
+        if self.collection.count() == 0:
+            print("Vector store is empty - processing PDFs...")
+            documents = process_all_pdfs("app")
+            if documents:
+                split_docs = split_documents(documents)
+                embeddings = EmbeddingManager().generate_embeddings([doc.page_content for doc in split_docs])
+                self.add_documents(split_docs, embeddings)
+            else:
+                print("No PDFs found to process")
 
     def _init_vectorstore(self):
         try:
@@ -190,7 +196,6 @@ class VectorStore:
         else:
             print("No new documents to add — skipping.")
 
-
 class RagRetriever:
     def __init__(self, vector_store, embedding_manager: EmbeddingManager):
         self.vector_store = vector_store
@@ -238,7 +243,6 @@ class RagRetriever:
         except Exception as e:
             print(f"Error during retrieval: {e}")
             return []
-
 
 def rag_advanced(query, retriever, llm, top_k=5, min_score=0.2, return_context=False):
     if not GROQ_API_KEY:
@@ -302,7 +306,6 @@ Answer:
 
     return output
 
-
 def rag_simple(query, retriever, llm, top_k=5):
     if not GROQ_API_KEY:
         return "GROQ_API_KEY not found. Please set it in Streamlit secrets or environment variables."
@@ -327,7 +330,6 @@ def rag_simple(query, retriever, llm, top_k=5):
 
     response = llm.invoke(prompt)
     return response.content
-
 
 def initialize_llm():
     if not GROQ_API_KEY:

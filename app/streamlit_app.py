@@ -1,13 +1,13 @@
 import streamlit as st
 import os
+import traceback
 
 if hasattr(st, 'secrets') and 'GROQ_API_KEY' in st.secrets:
     os.environ['GROQ_API_KEY'] = st.secrets['GROQ_API_KEY']
 else:
     from dotenv import load_dotenv
-    load_dotenv()
 
-from RagFullPipeline import rag_advanced, initialize_llm, RagRetriever, EmbeddingManager, VectorStore
+    load_dotenv()
 
 st.set_page_config(
     page_title="Law Study Buddy",
@@ -46,17 +46,37 @@ st.markdown("""
 st.markdown('<h1 class="main-header">⚖️ Law Study Buddy</h1>', unsafe_allow_html=True)
 st.markdown("### AI-Powered Legal Research Assistant")
 
+
 @st.cache_resource
 def load_rag_components():
     try:
-        llm = initialize_llm()
+        from RagFullPipeline import rag_advanced, initialize_llm, RagRetriever, EmbeddingManager, VectorStore
+
+        st.sidebar.write("✅ Imports successful")
+
         embedding_manager = EmbeddingManager()
+        st.sidebar.write("✅ Embedding manager loaded")
+
         vectorstore = VectorStore()
+        st.sidebar.write("✅ Vector store loaded")
+
+        llm = initialize_llm()
+        if llm:
+            st.sidebar.write("✅ LLM initialized")
+        else:
+            st.sidebar.error("❌ LLM failed - Check GROQ_API_KEY")
+            return None, None
+
         retriever = RagRetriever(vectorstore, embedding_manager)
+        st.sidebar.write("✅ Retriever ready")
+
         return retriever, llm
+
     except Exception as e:
-        st.error(f"Failed to initialize RAG system: {e}")
+        st.sidebar.error(f"❌ RAG initialization failed: {str(e)}")
+        st.sidebar.code(traceback.format_exc())
         return None, None
+
 
 with st.sidebar:
     st.header("⚙️ Settings")
@@ -162,6 +182,7 @@ with col1:
 
             except Exception as e:
                 st.error(f"Error processing query: {str(e)}")
+                st.code(traceback.format_exc())
 
 with col2:
     st.subheader("💡 Example Questions")

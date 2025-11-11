@@ -1,11 +1,12 @@
 streamlit
 langchain
 langchain-community
+langchain-groq
 groq
 chromadb
 sentence-transformers
 pypdf2
+pymupdf
 python-dotenv
 pandas
 numpy
-pymupdf

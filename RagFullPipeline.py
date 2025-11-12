@@ -11,6 +11,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
 from sentence_transformers import SentenceTransformer
 import chromadb
+from chromadb.config import Settings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -76,7 +77,13 @@ class VectorStore:
         self.persist_directory = persist_directory
         self.use_persistent = use_persistent
         self.pdf_folder = pdf_folder
-        self.client = chromadb.Client() if not self.use_persistent else chromadb.PersistentClient(path=self.persist_directory, settings=chromadb.config.Settings(allow_reset=True))
+        if self.use_persistent:
+            self.client = chromadb.PersistentClient(
+                path=self.persist_directory,
+                settings=Settings(allow_reset=True)
+            )
+        else:
+            self.client = chromadb.Client()
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"Description": "PDF document embedding for RAG"}

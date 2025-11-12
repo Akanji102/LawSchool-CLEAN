@@ -13,19 +13,11 @@ st.set_page_config(
 st.session_state.setdefault('rag_initialized', False)
 st.session_state.setdefault('vector_store_ready', False)
 
-st.sidebar.write("###  Debugging")
-st.sidebar.write(f"Has required stuffs are active! That is amazing!!: {hasattr(st, 'secrets')}")
-
-if hasattr(st, 'secrets'):
-    st.sidebar.write(f"All secrets: {list(st.secrets.keys())}")
-    if 'GROQ_API_KEY' in st.secrets:
-        st.sidebar.write(f"Important stuff: {st.secrets['Super_important_stuff'][:10]}...")
-        os.environ['GROQ_API_KEY'] = st.secrets['GROQ_API_KEY']
-    else:
-        st.sidebar.write("❌ Hmmm... omooo something is wrong here")
+# Load environment variables securely
+if hasattr(st, 'secrets') and 'GROQ_API_KEY' in st.secrets:
+    os.environ['GROQ_API_KEY'] = st.secrets['GROQ_API_KEY']
 else:
     from dotenv import load_dotenv
-
     load_dotenv()
 
 st.markdown("""
@@ -58,16 +50,14 @@ def initialize_minimal_rag():
         # Initialize LLM first (fast)
         llm = initialize_llm()
         if not llm:
-            st.error("❌ LLM failed - Check GROQ_API_KEY")
             return None, None, None
 
         # Initialize embedding manager (fast)
         embedding_manager = EmbeddingManager()
 
-        return llm, embedding_manager, "Minimal components loaded"
+        return llm, embedding_manager, "Components loaded"
 
     except Exception as e:
-        st.error(f"❌ Initialization failed: {str(e)}")
         return None, None, str(e)
 
 
@@ -79,8 +69,7 @@ def load_vector_store_lazy():
         # Check if prebuilt vector store exists
         persist_dir = "./prebuilt_vector_store"
         if not os.path.exists(persist_dir):
-            st.warning("⚠️ No prebuilt vector store found. Using demo mode.")
-            return None, "No vector store available"
+            return None, "No legal database available"
 
         # Load existing vector store (should be fast)
         vectorstore = VectorStore(
@@ -89,13 +78,13 @@ def load_vector_store_lazy():
             pdf_folder=None  # Don't populate on load
         )
 
-        return vectorstore, f"Vector store loaded with {vectorstore.collection.count()} documents"
+        return vectorstore, f"Ready with {vectorstore.collection.count()} documents"
 
     except Exception as e:
-        return None, f"Vector store error: {str(e)}"
+        return None, f"Database error: {str(e)}"
 
 
-# Initialize minimal components
+# Initialize components
 with st.sidebar:
     st.header("📊 System Status")
 
@@ -106,21 +95,21 @@ with st.sidebar:
                 st.session_state.llm = llm
                 st.session_state.embedding_manager = embedding_manager
                 st.session_state.rag_initialized = True
-                st.success("✅ AI Components Ready")
+                st.success("✅ AI System Ready")
             else:
-                st.error(f"❌ {status_msg}")
+                st.error("❌ System initialization failed")
 
     if st.session_state.rag_initialized and not st.session_state.vector_store_ready:
-        with st.spinner("Checking vector store..."):
+        with st.spinner("Loading legal database..."):
             vectorstore, vector_status = load_vector_store_lazy()
             if vectorstore:
                 st.session_state.vectorstore = vectorstore
                 st.session_state.retriever = RagRetriever(vectorstore, st.session_state.embedding_manager)
                 st.session_state.vector_store_ready = True
-                st.success("✅ Vector Store Ready")
+                st.success("✅ Legal Database Ready")
                 st.info(f"📚 Documents: {vectorstore.collection.count()}")
             else:
-                st.warning("⚠️ " + vector_status)
+                st.info("💡 Using AI-only mode")
 
 with st.sidebar:
     st.header("⚙️ Settings")
@@ -129,7 +118,7 @@ with st.sidebar:
         "Number of sources",
         min_value=1,
         max_value=10,
-        value=3,  # Reduced for performance
+        value=3,
         help="How many legal documents to retrieve"
     )
 
@@ -137,7 +126,7 @@ with st.sidebar:
         "Minimum confidence",
         min_value=0.0,
         max_value=1.0,
-        value=0.3,  # Increased for better quality
+        value=0.3,
         step=0.1,
         help="Minimum similarity score for sources"
     )
@@ -157,7 +146,7 @@ with col1:
         if not query.strip():
             st.error("Please enter a legal question")
         elif not st.session_state.get('rag_initialized'):
-            st.error("AI components not ready. Please check system status.")
+            st.error("System not ready. Please check status.")
         else:
             try:
                 with st.spinner("🔍 Researching legal sources..."):
@@ -224,7 +213,7 @@ with col2:
     st.markdown("---")
     st.subheader("⚡ Quick Actions")
 
-    if st.button("🔄 Check Vector Store", use_container_width=True):
+    if st.button("🔄 Refresh System", use_container_width=True):
         st.session_state.vector_store_ready = False
         st.rerun()
 

@@ -67,14 +67,14 @@ def load_rag_components():
 
         # Automatically use prebuilt vector store if it exists
         persist_dir = "./prebuilt_vector_store"
-        pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"  # Updated PDF directory path
+        pdf_folder = "."  # Current directory where the app is running
 
         use_persistent = os.path.exists(persist_dir)
 
         vectorstore = VectorStore(
             persist_directory=persist_dir,
             use_persistent=use_persistent,
-            pdf_folder=pdf_folder if os.path.exists(pdf_folder) else None
+            pdf_folder=pdf_folder  # Always pass current directory
         )
         st.sidebar.write(f"✅ Vector store loaded (persistent={use_persistent})")
 
@@ -132,7 +132,7 @@ with st.sidebar:
             st.info(f"📚 Documents: {doc_count}")
 
             # Show document ingestion status
-            pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"
+            pdf_folder = "."  # Current directory
             if os.path.exists(pdf_folder):
                 pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf')]
                 st.info(f"📄 PDFs available: {len(pdf_files)}")
@@ -172,7 +172,7 @@ with col1:
                 doc_count = retriever.vector_store.collection.count()
                 if doc_count == 0:
                     st.warning(
-                        "⚠️ No documents in vector store. Please add PDFs to the app directory and reload the system.")
+                        "⚠️ No documents in vector store. Please add PDFs to the current directory and reload the system.")
 
                 with st.spinner("🔍 Researching legal sources..."):
                     final_query = query
@@ -242,7 +242,7 @@ with col2:
 
     # Add manual document ingestion button
     if st.button("📥 Ingest PDF Documents", use_container_width=True):
-        pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"
+        pdf_folder = "."  # Current directory
         if os.path.exists(pdf_folder):
             pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf')]
             if pdf_files:
@@ -260,9 +260,9 @@ with col2:
                 except Exception as e:
                     st.error(f"Failed to ingest PDFs: {str(e)}")
             else:
-                st.warning("No PDF files found in the app directory")
+                st.warning("No PDF files found in current directory")
         else:
-            st.warning("PDF directory not found")
+            st.warning("Current directory not accessible")
 
 st.markdown("---")
 st.markdown(

@@ -13,16 +13,16 @@ st.set_page_config(
 st.session_state.setdefault('rag_initialized', False)
 st.session_state.setdefault('vector_store_ready', False)
 
-st.sidebar.write("### Secrets Debug")
-st.sidebar.write(f"Has secrets: {hasattr(st, 'secrets')}")
+st.sidebar.write("###  Debugging")
+st.sidebar.write(f"Has required stuffs are active! That is amazing!!: {hasattr(st, 'secrets')}")
 
 if hasattr(st, 'secrets'):
     st.sidebar.write(f"All secrets: {list(st.secrets.keys())}")
     if 'GROQ_API_KEY' in st.secrets:
-        st.sidebar.write(f"API Key found: {st.secrets['GROQ_API_KEY'][:10]}...")
+        st.sidebar.write(f"Important stuff: {st.secrets['Super_important_stuff'][:10]}...")
         os.environ['GROQ_API_KEY'] = st.secrets['GROQ_API_KEY']
     else:
-        st.sidebar.write("❌ GROQ_API_KEY not found in secrets")
+        st.sidebar.write("❌ Hmmm... omooo something is wrong here")
 else:
     from dotenv import load_dotenv
 

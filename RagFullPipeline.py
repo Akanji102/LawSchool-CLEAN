@@ -77,13 +77,23 @@ class VectorStore:
         self.persist_directory = persist_directory
         self.use_persistent = use_persistent
         self.pdf_folder = pdf_folder
+
         if self.use_persistent:
-            self.client = chromadb.PersistentClient(
-                path=self.persist_directory,
-                settings=Settings(allow_reset=True)
-            )
+            try:
+                self.client = chromadb.PersistentClient(
+                    path=self.persist_directory,
+                    settings=Settings(allow_reset=True)
+                )
+            except ValueError:
+                # Close existing client and recreate
+                chromadb.PersistentClient(path=self.persist_directory, settings=Settings(allow_reset=True))._close()
+                self.client = chromadb.PersistentClient(
+                    path=self.persist_directory,
+                    settings=Settings(allow_reset=True)
+                )
         else:
             self.client = chromadb.Client()
+
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"Description": "PDF document embedding for RAG"}

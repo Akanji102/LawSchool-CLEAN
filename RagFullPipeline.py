@@ -115,16 +115,29 @@ class EmbeddingManager:
 
 class VectorStore:
     def __init__(self, collection_name: str = "pdf_documents",
-                 persist_directory: str = "./prebuilt_vector_store"):
+                 persist_directory: str = "./prebuilt_vector_store",
+                 use_persistent: bool = False):
+        """
+        :param collection_name: Name of the collection
+        :param persist_directory: Directory for persistent storage (local)
+        :param use_persistent: Set to True if running locally and want persistence
+        """
         self.collection_name = collection_name
         self.persist_directory = persist_directory
+        self.use_persistent = use_persistent
         self.client = None
         self.collection = None
         self._init_vectorstore()
 
     def _init_vectorstore(self):
         try:
-            self.client = chromadb.PersistentClient(path=self.persist_directory)
+            if self.use_persistent:
+                # Local/dev environment
+                self.client = chromadb.PersistentClient(path=self.persist_directory)
+            else:
+                # Streamlit/cloud environment
+                self.client = chromadb.Client()  # in-memory DB
+
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"Description": "PDF document embedding for RAG"}
@@ -132,16 +145,24 @@ class VectorStore:
             print(f"Vector store initialized. Collection: {self.collection_name}")
             print(f"Existing documents in collection: {self.collection.count()}")
 
-            if self.collection.count() == 0:
-                print("Vector store appears corrupted or empty. Rebuilding...")
+            # Optionally rebuild if empty
+            if self.collection.count() == 0 and self.use_persistent:
+                print("Vector store appears empty. Rebuilding...")
                 self._rebuild_vectorstore()
 
         except Exception as e:
             print(f"Error initializing vector store: {e}")
-            print("Attempting to rebuild vector store...")
-            self._rebuild_vectorstore()
+            if self.use_persistent:
+                print("Attempting to rebuild persistent vector store...")
+                self._rebuild_vectorstore()
+            else:
+                raise
 
     def _rebuild_vectorstore(self):
+        if not self.use_persistent:
+            print("Cannot rebuild in-memory vector store; skipping.")
+            return
+
         try:
             if os.path.exists(self.persist_directory):
                 shutil.rmtree(self.persist_directory)

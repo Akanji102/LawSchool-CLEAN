@@ -14,6 +14,7 @@ if hasattr(st, 'secrets'):
         st.sidebar.write("❌ GROQ_API_KEY not found in secrets")
 else:
     from dotenv import load_dotenv
+
     load_dotenv()
 
 from RagFullPipeline import rag_advanced, initialize_llm, RagRetriever, EmbeddingManager, VectorStore
@@ -55,6 +56,7 @@ st.markdown("""
 st.markdown('<h1 class="main-header">⚖️ Law Study Buddy</h1>', unsafe_allow_html=True)
 st.markdown("### AI-Powered Legal Research Assistant")
 
+
 @st.cache_resource
 def load_rag_components():
     try:
@@ -65,10 +67,14 @@ def load_rag_components():
 
         # Automatically use prebuilt vector store if it exists
         persist_dir = "./prebuilt_vector_store"
+        pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"  # Updated PDF directory path
+
         use_persistent = os.path.exists(persist_dir)
+
         vectorstore = VectorStore(
             persist_directory=persist_dir,
-            use_persistent=use_persistent
+            use_persistent=use_persistent,
+            pdf_folder=pdf_folder if os.path.exists(pdf_folder) else None
         )
         st.sidebar.write(f"✅ Vector store loaded (persistent={use_persistent})")
 
@@ -88,6 +94,7 @@ def load_rag_components():
         st.sidebar.error(f"❌ RAG initialization failed: {str(e)}")
         st.sidebar.code(traceback.format_exc())
         return None, None
+
 
 with st.sidebar:
     st.header("⚙️ Settings")
@@ -123,7 +130,15 @@ with st.sidebar:
         try:
             doc_count = retriever.vector_store.collection.count()
             st.info(f"📚 Documents: {doc_count}")
-        except:
+
+            # Show document ingestion status
+            pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"
+            if os.path.exists(pdf_folder):
+                pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf')]
+                st.info(f"📄 PDFs available: {len(pdf_files)}")
+                if doc_count == 0 and pdf_files:
+                    st.warning("⚠️ Vector store is empty. Click 'Reload RAG System' to ingest PDFs.")
+        except Exception as e:
             st.info("📚 Documents: Loading...")
     else:
         st.error("❌ RAG System: Not Ready")
@@ -153,6 +168,12 @@ with col1:
             st.error("RAG system not initialized. Please check system status.")
         else:
             try:
+                # Check if vector store has documents
+                doc_count = retriever.vector_store.collection.count()
+                if doc_count == 0:
+                    st.warning(
+                        "⚠️ No documents in vector store. Please add PDFs to the app directory and reload the system.")
+
                 with st.spinner("🔍 Researching legal sources..."):
                     final_query = query
                     if custom_prompt:
@@ -218,6 +239,30 @@ with col2:
     if st.button("🔄 Reload RAG System", use_container_width=True):
         load_rag_components.clear()
         st.rerun()
+
+    # Add manual document ingestion button
+    if st.button("📥 Ingest PDF Documents", use_container_width=True):
+        pdf_folder = r"C:\Users\DELL\LawSchool-CLEAN\app"
+        if os.path.exists(pdf_folder):
+            pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf')]
+            if pdf_files:
+                try:
+                    with st.spinner(f"Ingesting {len(pdf_files)} PDF documents..."):
+                        # Reinitialize vector store with PDF folder
+                        vectorstore = VectorStore(
+                            persist_directory="./prebuilt_vector_store",
+                            use_persistent=True,
+                            pdf_folder=pdf_folder
+                        )
+                    st.success(f"✅ Successfully ingested {len(pdf_files)} PDF documents")
+                    load_rag_components.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to ingest PDFs: {str(e)}")
+            else:
+                st.warning("No PDF files found in the app directory")
+        else:
+            st.warning("PDF directory not found")
 
 st.markdown("---")
 st.markdown(

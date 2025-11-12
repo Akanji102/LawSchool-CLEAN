@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def get_groq_api_key():
     if 'GROQ_API_KEY' in os.environ:
         return os.environ['GROQ_API_KEY']
@@ -34,7 +35,9 @@ def get_groq_api_key():
         pass
     return None
 
+
 GROQ_API_KEY = get_groq_api_key()
+
 
 def process_all_pdfs(pdf_directory):
     all_documents = []
@@ -52,6 +55,7 @@ def process_all_pdfs(pdf_directory):
             continue
     return all_documents
 
+
 def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -61,12 +65,15 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     )
     return text_splitter.split_documents(documents)
 
+
 class EmbeddingManager:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
         self.model = SentenceTransformer(self.model_name)
+
     def generate_embeddings(self, texts: List[str]) -> np.ndarray:
         return self.model.encode(texts, show_progress_bar=True)
+
 
 class VectorStore:
     def __init__(self, collection_name: str = "pdf_documents",
@@ -78,28 +85,50 @@ class VectorStore:
         self.use_persistent = use_persistent
         self.pdf_folder = pdf_folder
 
-        if self.use_persistent:
-            try:
-                self.client = chromadb.PersistentClient(
-                    path=self.persist_directory,
-                    settings=Settings(allow_reset=True)
-                )
-            except ValueError:
-                # Close existing client and recreate
-                chromadb.PersistentClient(path=self.persist_directory, settings=Settings(allow_reset=True))._close()
-                self.client = chromadb.PersistentClient(
-                    path=self.persist_directory,
-                    settings=Settings(allow_reset=True)
-                )
-        else:
-            self.client = chromadb.Client()
+        # Initialize ChromaDB client with error handling
+        self.client = self._initialize_chroma_client()
 
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"Description": "PDF document embedding for RAG"}
         )
+
+        # Populate with documents if collection is empty and PDF folder is provided
         if self.collection.count() == 0 and self.pdf_folder:
+            print(f"Populating vector store from PDF folder: {self.pdf_folder}")
             self.populate_from_pdfs(self.pdf_folder)
+        else:
+            print(f"Vector store loaded with {self.collection.count()} documents")
+
+    def _initialize_chroma_client(self):
+        """Initialize ChromaDB client with proper error handling"""
+        import os
+        import shutil
+
+        if not self.use_persistent:
+            return chromadb.EphemeralClient()
+
+        # For persistent storage, handle settings conflicts
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # Try without settings first (most compatible)
+                client = chromadb.PersistentClient(path=self.persist_directory)
+                return client
+            except ValueError as e:
+                if "already exists" in str(e) and attempt < max_retries - 1:
+                    # Delete the conflicting database and retry
+                    print(f"Database conflict detected. Removing {self.persist_directory}...")
+                    if os.path.exists(self.persist_directory):
+                        shutil.rmtree(self.persist_directory)
+                    os.makedirs(self.persist_directory, exist_ok=True)
+                else:
+                    # Fallback to ephemeral on final failure
+                    print(f"Persistent storage failed: {e}. Using ephemeral client.")
+                    return chromadb.EphemeralClient()
+
+        # Final fallback
+        return chromadb.EphemeralClient()
 
     def _doc_hash(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
@@ -139,18 +168,39 @@ class VectorStore:
                     metadatas=new_metas[i:end_idx],
                     documents=new_texts[i:end_idx]
                 )
+            print(f"Added {len(new_ids)} new documents to vector store")
 
     def populate_from_pdfs(self, pdf_folder: str):
+        """Load and process PDFs from the specified folder"""
+        if not os.path.exists(pdf_folder):
+            print(f"PDF folder not found: {pdf_folder}")
+            return
+
+        print(f"Processing PDFs from: {pdf_folder}")
         documents = process_all_pdfs(pdf_folder)
+
+        if not documents:
+            print("No PDF documents found or processed")
+            return
+
+        print(f"Loaded {len(documents)} documents from PDFs")
         split_docs = split_documents(documents)
+        print(f"Split into {len(split_docs)} chunks")
+
         embedding_manager = EmbeddingManager()
+        print("Generating embeddings...")
         embeddings = embedding_manager.generate_embeddings([doc.page_content for doc in split_docs])
+        print(f"Generated {len(embeddings)} embeddings")
+
         self.add_documents(split_docs, embeddings)
+        print("PDF population completed")
+
 
 class RagRetriever:
     def __init__(self, vector_store, embedding_manager: EmbeddingManager):
         self.vector_store = vector_store
         self.embedding_manager = embedding_manager
+
     def retrieve(self, query: str, top_k: int = 5, score_threshold: float = 0.0) -> List[Dict[str, Any]]:
         query_embedding = self.embedding_manager.generate_embeddings([query])[0]
         try:
@@ -179,6 +229,7 @@ class RagRetriever:
         except:
             return []
 
+
 def rag_advanced(query, retriever, llm, top_k=5, min_score=0.2, return_context=False):
     if not GROQ_API_KEY:
         return {'answer': 'GROQ_API_KEY not found.', 'sources': [], 'confidence': 0.0, 'context': ''}
@@ -204,6 +255,7 @@ Answer:
     if return_context:
         output['context'] = context
     return output
+
 
 def initialize_llm():
     if not GROQ_API_KEY:

@@ -63,8 +63,14 @@ def load_rag_components():
         embedding_manager = EmbeddingManager()
         st.sidebar.write("✅ Embedding manager loaded")
 
-        vectorstore = VectorStore()
-        st.sidebar.write("✅ Vector store loaded")
+        # Automatically use prebuilt vector store if it exists
+        persist_dir = "./prebuilt_vector_store"
+        use_persistent = os.path.exists(persist_dir)
+        vectorstore = VectorStore(
+            persist_directory=persist_dir,
+            use_persistent=use_persistent
+        )
+        st.sidebar.write(f"✅ Vector store loaded (persistent={use_persistent})")
 
         llm = initialize_llm()
         if llm:
